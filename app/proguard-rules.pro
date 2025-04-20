@@ -1,0 +1,2 @@
+-keep class github.hiro.primevideo.Main
+-ignorewarnings

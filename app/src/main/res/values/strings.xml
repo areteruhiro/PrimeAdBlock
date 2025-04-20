@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">PrimeAdBlock</string>
+    <string name="xposed_desc">PrimeAdBlock</string>
+    <string name="restarting">Ch.restart</string>
+
+
+</resources>
