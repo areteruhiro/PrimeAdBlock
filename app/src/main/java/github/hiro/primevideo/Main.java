@@ -28,7 +28,7 @@ public class Main implements IXposedHookLoadPackage {
 
 
      //hookAllAdClasses(loadPackageParam);
-        nullifyHttpAdClassesSafely(loadPackageParam);
+      //  nullifyHttpAdClassesSafely(loadPackageParam);
 
 
         Class<?> targetClass = XposedHelpers.findClassIfExists(
@@ -77,71 +77,57 @@ public class Main implements IXposedHookLoadPackage {
                         }
                     }
             );
-        }
+        }try {
+            Class<?> hook = XposedHelpers.findClass(
+                    "com.amazon.avod.media.ads.internal.AdEnabledVideoPlayer",
+                    loadPackageParam.classLoader
+            );
+            XposedHelpers.findAndHookMethod(
+                    hook,
+                    "getCurrentPosition",
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            if (!AD_TIME) return;
 
-                XposedBridge.log("on");
+                            try {
 
-                try {
-                Class<?> hook = XposedHelpers.findClassIfExists(
-                        "com.amazon.avod.media.ads.internal.AdEnabledVideoPlayer",
-                        loadPackageParam.classLoader
-                );
-                    if (targetClass != null) {
-                        XposedHelpers.findAndHookMethod(
-                                hook,
-                                "getCurrentPosition",
-                                new XC_MethodHook() {
-//                                    @Override
-//                                    protected void beforeHookedMethod(MethodHookParam param) {
-//                                        XposedBridge.log("╔═══════════════════════════════════");
-//                                        XposedBridge.log("║ [Before] getCurrentPosition()");
-//                                        XposedBridge.log("║ Target: " + param.thisObject.getClass().getName());
-//
-//                                        Object mPlayer = XposedHelpers.getObjectField(param.thisObject, "mPlayer");
-//                                        XposedBridge.log("║ mPlayer: " + (mPlayer != null ? "Exists" : "NULL"));
-//                                    }
+                                Object mPlayer = XposedHelpers.getObjectField(param.thisObject, "mPlayer");
+                                long rawPosition = (long) XposedHelpers.callMethod(mPlayer, "getCurrentPosition");
 
-                                    @Override
-                                    protected void afterHookedMethod(MethodHookParam param) {
-                                        if (AD_TIME) {
-                                            long rawPosition = (long) XposedHelpers.callMethod(
-                                                    XposedHelpers.getObjectField(param.thisObject, "mPlayer"),
-                                                    "getCurrentPosition"
-                                            );
-                                            Object timelineManager = XposedHelpers.getObjectField(param.thisObject, "mTimelineManager");
-                                            long nanoPosition = TimeUnit.MILLISECONDS.toNanos(rawPosition);
-                                            long adFreeNano = (long) XposedHelpers.callMethod(
-                                                    timelineManager,
-                                                    "getPositionExcludingAdsInNanos",
-                                                    nanoPosition
-                                            );
-                                            long finalResult = TimeUnit.NANOSECONDS.toMillis(adFreeNano);
-                                    long adjustedResult = finalResult - 8000;
-                                    if (adjustedResult < 0) {
-                                        adjustedResult = 0;
-                                    }
+                                Object timelineManager = XposedHelpers.getObjectField(param.thisObject, "mTimelineManager");
+                                long adFreeNano = (long) XposedHelpers.callMethod(
+                                        timelineManager,
+                                        "getPositionExcludingAdsInNanos",
+                                        TimeUnit.MILLISECONDS.toNanos(rawPosition)
+                                );
+                                long finalResult = TimeUnit.NANOSECONDS.toMillis(adFreeNano);
 
-                                            param.setResult(adjustedResult);
-                                            StringBuilder log = new StringBuilder()
-                                                    .append("║ [Processing Details]\n")
-                                                    .append("║   Raw Position: ").append(rawPosition).append(" ms\n")
-                                                    .append("║   Nano Position: ").append(nanoPosition).append(" ns\n")
-                                                    .append("║   After Ad Removal: ").append(adFreeNano).append(" ns\n")
-                                                    .append("║   Original Final: ").append(finalResult).append(" ms\n")
-                                                    .append("║   Adjusted Final: ").append(adjustedResult).append(" \n")
-                                                    .append("╚═══════════════════════════════════");
+                                Object currentAdBreak = XposedHelpers.getObjectField(mPlayer, "mCurrentAdBreak");
+                                if (currentAdBreak != null) {
+                                    Object adDuration = XposedHelpers.callMethod(currentAdBreak, "getDurationExcludingAux");
+                                    long adDurationMs = (long) XposedHelpers.callMethod(
+                                            adDuration,
+                                            "getTotalMilliseconds"
+                                    );
 
-                                           // XposedBridge.log(log.toString());
-                                            if (finalResult == 0) {
-                                                XposedBridge.log(" Original result was 0, adjusted to: " + adjustedResult);
-                                            }
-                                        }
-                                    }
+                                    long adjustedResult = finalResult - adDurationMs;
+                                    adjustedResult = Math.max(adjustedResult, 0);
+
+                                    param.setResult(adjustedResult);
+                                    XposedBridge.log("[AdSkip] Raw: " + rawPosition + "ms | " +
+                                            "Ad Duration: " + adDurationMs + "ms | " +
+                                            "Adjusted: " + adjustedResult + "ms");
                                 }
-                        );
+                            } catch (Throwable t) {
+                                XposedBridge.log("[AdSkip Error] " + t);
+                            }
+                        }
                     }
-                } catch (Throwable ignored) {
-                }
+            );
+        } catch (Throwable t) {
+            XposedBridge.log("[Hook Init Error] " + t);
+        }
 
 
 
